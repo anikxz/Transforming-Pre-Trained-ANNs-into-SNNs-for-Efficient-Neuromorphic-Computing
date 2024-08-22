@@ -1,0 +1,95 @@
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+
+# Define a more complex ANN model with additional layers
+class ANNModel(nn.Module):
+    def __init__(self):
+        super(ANNModel, self).__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(28 * 28, 256),  # Increased hidden layer size
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 10)
+        )
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+# Define a more complex spiking model (SNN)
+class SpikingModel(nn.Module):
+    def __init__(self):
+        super(SpikingModel, self).__init__()
+        self.fc1 = nn.Linear(28 * 28, 256)  # Increased layer size
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 10)
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        spikes = self.fc3(x)  # Output spikes directly
+        return spikes
+
+# Load the MNIST dataset with data augmentation added
+transform = transforms.Compose([
+    transforms.RandomRotation(10),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,))
+])
+train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
+train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
+
+# Initialize ANN and SNN models
+ann_model = ANNModel()
+snn_model = SpikingModel()
+
+# Define loss and optimizer with weight decay for regularization
+criterion = nn.CrossEntropyLoss()
+ann_optimizer = torch.optim.Adam(ann_model.parameters(), lr=0.001)  # Use Adam optimizer
+snn_optimizer = torch.optim.Adam(snn_model.parameters(), lr=0.001)  # Use Adam optimizer
+
+# Training loop for ANN and SNN with increased epochs
+def train(model, optimizer, criterion, train_loader, epochs=20):
+    for epoch in range(epochs):
+        running_loss = 0.0
+        for inputs, labels in train_loader:
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+        print(f"Epoch {epoch+1}, Loss: {running_loss / len(train_loader):.4f}")
+
+# Train ANN and SNN
+train(ann_model, ann_optimizer, criterion, train_loader)
+train(snn_model, snn_optimizer, criterion, train_loader)
+
+# Evaluate the models (accuracy)
+def test(model, test_loader):
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for inputs, labels in test_loader:
+            outputs = model(inputs)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    accuracy = 100 * correct / total
+    return accuracy
+
+# Load the test dataset
+test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+# Test ANN and SNN accuracy
+ann_accuracy = test(ann_model, test_loader)
+snn_accuracy = test(snn_model, test_loader)
+
+print(f"ANN Accuracy: {ann_accuracy:.2f}%")
+print(f"SNN Accuracy: {snn_accuracy:.2f}%")
